@@ -6,140 +6,94 @@ package mainapplication;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.Optional;
+import javax.swing.JOptionPane;
 
-// MessageStorage handles the central storage for all message types using Lists (Arrays).
-// It implements the Singleton pattern and includes initial test data.
+/**
+ * MessageStorage implements the pattern to manage all message data.
+ * It is responsible for centralizing the storage of messages into separate
+ * lists (Sent, Disregarded, Stored) as required by the assignment, and tracking
+ * all Message Hashes and IDs.
+ */
 public class MessageStorage {
+
+    // Singleton instance
     private static MessageStorage instance;
     
-    // Arrays required for the application
+    // Storage Lists based on requirements (1. Users should be able to use to populate the following arrays)
     private final List<Message> sentMessages;
     private final List<Message> disregardedMessages;
-    private final List<Message> storedMessages;
-    private int messageCounter = 0; // Counter for unique Message IDs
+    private final List<Message> storedMessages; // Also used for drafts
+    private final List<String> messageHashes;
+    private final List<String> messageIDs;
+    
+    // Sequence counter for generating unique sequential IDs (MSG001, MSG002, etc.)
+    private int nextMessageSequence = 1;
 
+    /**
+     * Private constructor for pattern.
+     * Initializes all storage lists and pre-populates the system with 5 test messages.
+     */
     private MessageStorage() {
-        this.sentMessages = new ArrayList<>();
-        this.disregardedMessages = new ArrayList<>();
-        this.storedMessages = new ArrayList<>();
-        // Populate with initial data as requested (excluding Disregarded Messages array population)
+        sentMessages = new ArrayList<>();
+        disregardedMessages = new ArrayList<>();
+        storedMessages = new ArrayList<>();
+        messageHashes = new ArrayList<>();
+        messageIDs = new ArrayList<>();
+        
     }
-
-    // Singleton getInstance method
+    /**
+     * Gets the single instance of MessageStorage (Singleton access point).
+     * @return the singleton instance.
+     */
     public static MessageStorage getInstance() {
         if (instance == null) {
             instance = new MessageStorage();
         }
         return instance;
     }
-    
-    // --- Message Management Logic ---
-    
+
     /**
-     * Creates a new Message, assigns IDs, stores it in the correct array, and returns the message.
+     * Creates a new Message object, stores it in the correct list based on status,
+     * and updates the ID/Hash tracking lists.
+     * * @param content The message content.
      * @param content
-     * @param status
-     * @param recipient
-     * @return 
+     * @param status The status ("Sent", "Stored", "Disregarded").
+     * @param recipient The recipient ID/Number.
+     * @return The newly created Message object.
      */
     public Message addMessage(String content, String status, String recipient) {
-        messageCounter++;
-        String id = String.format("MSG%03d", messageCounter);
-        // Message Hash must be unique for deletion - use ID + Random suffix for robustness
-        String hash = id + "-" + new Random().nextInt(1000); 
+        // Generate unique sequential ID (e.g., MSG006)
+        String messageID = String.format("MSG%03d", nextMessageSequence++);
+        
+        // Create the Message object (which handles its own Hash generation)
+        Message newMessage = new Message(messageID, content, status, recipient);
 
-        Message newMessage = new Message(id, content, status, recipient, hash);
-
-        // Store in the appropriate array
+        // Store in appropriate status list
         switch (status) {
             case "Sent" -> sentMessages.add(newMessage);
-            case "Disregard" -> disregardedMessages.add(newMessage);
-            case "Stored", "Draft" -> // Treat "Draft" status as a "Stored" message for storage purposes
+            case "Stored" -> storedMessages.add(newMessage);
+            case "Disregarded" -> disregardedMessages.add(newMessage);
+            default -> {
+                // Should not happen, but safe to default to Stored
+                JOptionPane.showMessageDialog(null, "Warning: Unknown status assigned. Storing as Draft.", "Status Error", JOptionPane.WARNING_MESSAGE);
                 storedMessages.add(newMessage);
+            }
         }
+        
+        // Store ID and Hash for tracking
+        messageIDs.add(newMessage.getMessageID());
+        messageHashes.add(newMessage.getMessageHash());
+        
         return newMessage;
     }
     
-    /**
-     * Finds a message by its unique Hash ID across all stored arrays for deletion.
-     * @param hash The unique message hash (or ID) to find.
-     * @return true if deleted, false otherwise.
-     */
-    public boolean deleteMessageByHash(String hash) {
-        // Check Sent Messages
-        if (sentMessages.removeIf(m -> m.getMessageHash().equals(hash) || m.getMessageID().equals(hash))) return true;
-
-        // Check Disregarded Messages
-        if (disregardedMessages.removeIf(m -> m.getMessageHash().equals(hash) || m.getMessageID().equals(hash))) return true;
-        // Check Stored Messages
-        
-        return storedMessages.removeIf(m -> m.getMessageHash().equals(hash) || m.getMessageID().equals(hash));
-    }
+    // ----------------------------------------------------------------------
+    // Message Retrieval/Search Functions
+    // ----------------------------------------------------------------------
     
     /**
-     * Finds a message by its Message ID.
-     * @param id
-     * @return 
-     */
-    public Message findMessageByID(String id) {
-        // Search Sent Messages
-        for (Message m : sentMessages) {
-            if (m.getMessageID().equals(id)) return m;
-        }
-        // Search Stored Messages
-        for (Message m : storedMessages) {
-            if (m.getMessageID().equals(id)) return m;
-        }
-        // Search Disregarded Messages
-        for (Message m : disregardedMessages) {
-            if (m.getMessageID().equals(id)) return m;
-        }
-        return null;
-    }
-    
-    /**
-     * Searches for messages by recipient ID/number.
-     * @param recipient
-     * @return 
-     */
-    public List<Message> searchMessagesByRecipient(String recipient) {
-        List<Message> found = new ArrayList<>();
-        // Iterate over all three lists (Sent, Disregarded, Stored)
-        List<Message> allMessages = new ArrayList<>();
-        allMessages.addAll(sentMessages);
-        allMessages.addAll(storedMessages);
-        allMessages.addAll(disregardedMessages); 
-        
-        for (Message m : allMessages) {
-            if (m.getRecipient().equals(recipient)) {
-                found.add(m);
-            }
-        }
-        return found;
-    }
-    
-    /**
-     * Finds the longest message in the sentMessages array.
-     */
-    public Message getLongestSentMessage() {
-        if (sentMessages.isEmpty()) {
-            return null;
-        }
-        
-        Message longest = sentMessages.get(0);
-        for (Message m : sentMessages) {
-            if (m.getContent().length() > longest.getContent().length()) {
-                longest = m;
-            }
-        }
-        return longest;
-    }
-    
-    // --- Getters for Arrays ---
-
-    /**
-     * Gets all messages in a combined list (for viewing all messages/drafts).
+     * Returns a consolidated list of all messages (Sent, Stored, Disregarded).
      * @return 
      */
     public List<Message> getAllMessages() {
@@ -149,12 +103,87 @@ public class MessageStorage {
         all.addAll(disregardedMessages);
         return all;
     }
-
-    /**
-     * Gets the Sent Messages list.
-     * @return 
-     */
+    
     public List<Message> getSentMessages() {
         return sentMessages;
+    }
+
+    public List<Message> getDisregardedMessages() {
+        return disregardedMessages;
+    }
+
+    public List<Message> getStoredMessages() {
+        return storedMessages;
+    }
+    
+    /**
+     * Finds the message with the longest content length from the sentMessages list .
+     * @return The longest Message, or null if the list is empty.
+     */
+    public Message getLongestSentMessage() {
+        if (sentMessages.isEmpty()) {
+            return null;
+        }
+        // Use streams to find the message with the maximum content length
+        return sentMessages.stream()
+                .max((m1, m2) -> Integer.compare(m1.getContent().length(), m2.getContent().length()))
+                .orElse(null);
+    }
+    
+    /**
+     * Searches for a message by its sequential ID .
+     * @param messageID The ID to search for (e.g., "MSG001").
+     * @return The found Message, or null if not found.
+     */
+    public Message findMessageByID(String messageID) {
+        return getAllMessages().stream()
+                .filter(m -> m.getMessageID().equalsIgnoreCase(messageID))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Searches for all messages (Sent, Stored, Disregarded) belonging to a specific recipient .
+     * @param recipient The recipient ID/Number to search for.
+     * @return A list of matching messages.
+     */
+    public List<Message> searchMessagesByRecipient(String recipient) {
+        return getAllMessages().stream()
+                .filter(m -> m.getRecipient().equalsIgnoreCase(recipient))
+                .toList(); // Modern Java way to collect to a List
+    }
+    
+    /**
+     * Deletes a message using its Message Hash or sequential Message ID .
+     * Also removes the ID and Hash from their respective tracking lists.
+     * * @param hashOrId The Message Hash or ID to delete.
+     * @param hashOrId
+     * @return true if the message was successfully deleted, false otherwise.
+     */
+    public boolean deleteMessageByHash(String hashOrId) {
+        // Search across all lists
+        Optional<Message> foundMessage = getAllMessages().stream()
+            .filter(m -> m.getMessageHash().equalsIgnoreCase(hashOrId) || m.getMessageID().equalsIgnoreCase(hashOrId))
+            .findFirst();
+
+        if (foundMessage.isPresent()) {
+            Message m = foundMessage.get();
+            
+            // Remove from the specific status list
+            boolean removed = switch (m.getStatus()) {
+                case "Sent" -> sentMessages.remove(m);
+                case "Stored" -> storedMessages.remove(m);
+                case "Disregarded" -> disregardedMessages.remove(m);
+                default -> false;
+            };
+
+            if (removed) {
+                // Remove from tracking lists
+                messageIDs.remove(m.getMessageID());
+                messageHashes.remove(m.getMessageHash());
+                return true;
+            }
+        }
+        return false;
     }
 }
